@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "SmartTracker user account, role, permissions, and preferences",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID" },
+        "displayName": { "type": "string", "description": "User full name" },
+        "email": { "type": "string", "description": "Verified email address" },
+        "photoUrl": { "type": "string", "description": "Optional profile avatar URL" },
+        "role": { "type": "string", "enum": ["ADMIN", "USER"], "description": "RBAC role" },
+        "active": { "type": "boolean", "description": "Account active status" },
+        "permissions": { "type": "array", "description": "Assigned capability flags (max 10)" },
+        "notifyOnUpdate": { "type": "boolean", "description": "Notify on record updates" },
+        "notifyOverdue": { "type": "boolean", "description": "Notify on overdue deadlines" },
+        "themeMode": { "type": "string", "enum": ["SYSTEM", "LIGHT", "DARK"], "description": "Theme preference" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp" }
+      },
+      "required": ["userId", "displayName", "email", "role", "active", "permissions", "notifyOnUpdate", "notifyOverdue", "themeMode", "createdAt", "updatedAt"]
+    },
+    "TrackingCategory": {
+      "title": "TrackingCategory",
+      "description": "Category for organizing tracking records",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "colorHex": { "type": "string" },
+        "description": { "type": "string" },
+        "active": { "type": "boolean" },
+        "shared": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "colorHex", "description", "active", "shared", "createdAt", "updatedAt"]
+    },
+    "TrackingRecord": {
+      "title": "TrackingRecord",
+      "description": "Core tracked entity with status, priority, assignee, dates, and progress",
+      "type": "object",
+      "properties": {
+        "trackingCode": { "type": "string" },
+        "userId": { "type": "string" },
+        "ownerName": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "assigneeName": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "priority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "status": { "type": "string", "enum": ["PENDING", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "CANCELLED", "OVERDUE"] },
+        "progressPercent": { "type": "integer" },
+        "startDateMillis": { "type": "integer" },
+        "dueDateMillis": { "type": "integer" },
+        "sourceType": { "type": "string", "enum": ["MANUAL", "WEBHOOK_PENDING", "IOT_UNCONFIGURED"] },
+        "notesCount": { "type": "integer" },
+        "attachmentsCount": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["trackingCode", "userId", "ownerName", "assigneeId", "assigneeName", "title", "description", "categoryId", "categoryName", "priority", "status", "progressPercent", "startDateMillis", "dueDateMillis", "sourceType", "notesCount", "attachmentsCount", "createdAt", "updatedAt"]
+    },
+    "TrackingUpdate": {
+      "title": "TrackingUpdate",
+      "description": "Immutable chronological update entry on a tracking record",
+      "type": "object",
+      "properties": {
+        "recordId": { "type": "string" },
+        "userId": { "type": "string" },
+        "recordOwnerId": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "authorName": { "type": "string" },
+        "previousStatus": { "type": "string" },
+        "newStatus": { "type": "string" },
+        "progressPercent": { "type": "integer" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["recordId", "userId", "recordOwnerId", "assigneeId", "authorName", "previousStatus", "newStatus", "progressPercent", "note", "createdAt"]
+    },
+    "Attachment": {
+      "title": "Attachment",
+      "description": "Metadata and Photo Picker URI reference attached to a tracking record",
+      "type": "object",
+      "properties": {
+        "recordId": { "type": "string" },
+        "userId": { "type": "string" },
+        "recordOwnerId": { "type": "string" },
+        "assigneeId": { "type": "string" },
+        "fileName": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "sizeBytes": { "type": "integer" },
+        "localUriString": { "type": "string" },
+        "uploadedByName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["recordId", "userId", "recordOwnerId", "assigneeId", "fileName", "mimeType", "sizeBytes", "localUriString", "uploadedByName", "createdAt"]
+    },
+    "NotificationItem": {
+      "title": "NotificationItem",
+      "description": "User-scoped in-app notification for status changes, reminders, and overdue alerts",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "recordId": { "type": "string" },
+        "trackingCode": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["STATUS_UPDATE", "DEADLINE_REMINDER", "OVERDUE_ALERT", "SYSTEM"] },
+        "read": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "recordId", "trackingCode", "title", "message", "type", "read", "createdAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable audit log entry for tracking, user, and settings actions",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "actorName": { "type": "string" },
+        "actorEmail": { "type": "string" },
+        "action": { "type": "string" },
+        "targetType": { "type": "string" },
+        "targetId": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "actorName", "actorEmail", "action", "targetType", "targetId", "details", "createdAt"]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Global SmartTracker configuration managed by administrators",
+      "type": "object",
+      "properties": {
+        "shared": { "type": "boolean" },
+        "autoMarkOverdue": { "type": "boolean" },
+        "deadlineWarningHours": { "type": "integer" },
+        "defaultPriority": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+        "allowUserRegistration": { "type": "boolean" },
+        "externalTrackerStatus": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["shared", "autoMarkOverdue", "deadlineWarningHours", "defaultPriority", "allowUserRegistration", "externalTrackerStatus", "updatedBy", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles, roles, and notification/theme preferences"
+    },
+    "/trackingCategories/{categoryId}": {
+      "schema": { "$ref": "#/entities/TrackingCategory" },
+      "description": "Global shared categories and user-created tracking categories"
+    },
+    "/trackingRecords/{recordId}": {
+      "schema": { "$ref": "#/entities/TrackingRecord" },
+      "description": "Tracked records with real-time status and progress"
+    },
+    "/trackingRecords/{recordId}/updates/{updateId}": {
+      "schema": { "$ref": "#/entities/TrackingUpdate" },
+      "description": "Chronological progress and status history for a tracking record"
+    },
+    "/trackingRecords/{recordId}/attachments/{attachmentId}": {
+      "schema": { "$ref": "#/entities/Attachment" },
+      "description": "Attachment references for a tracking record"
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "User-scoped notifications and overdue alerts"
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "System and user audit logs"
+    },
+    "/systemSettings/{settingId}": {
+      "schema": { "$ref": "#/entities/SystemSettings" },
+      "description": "Global system configuration"
+    }
+  }
+}

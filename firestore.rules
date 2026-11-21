@@ -1,0 +1,332 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email_verified == true &&
+        request.auth.token.email == 'vasquezaloja4@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.active == true
+      );
+    }
+
+    // --- ENTITY VALIDATION BLUEPRINTS ---
+
+    function isValidUser(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+        (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 500)) &&
+        data.role in ['ADMIN', 'USER'] &&
+        data.active is bool &&
+        data.permissions is list && data.permissions.size() <= 10 &&
+        (data.permissions.size() == 0 || data.permissions[0] is string) &&
+        data.notifyOnUpdate is bool &&
+        data.notifyOverdue is bool &&
+        data.themeMode in ['SYSTEM', 'LIGHT', 'DARK'] &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCategory(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.name is string && data.name.size() >= 2 && data.name.size() <= 50 &&
+        data.colorHex is string && data.colorHex.size() == 7 && data.colorHex.matches('^#[0-9A-Fa-f]{6}$') &&
+        data.description is string && data.description.size() <= 200 &&
+        data.active is bool &&
+        data.shared is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTrackingRecord(data) {
+      return data.trackingCode is string && data.trackingCode.size() >= 3 && data.trackingCode.size() <= 32 &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 80 &&
+        data.assigneeId is string && data.assigneeId.size() >= 1 && data.assigneeId.size() <= 128 &&
+        data.assigneeName is string && data.assigneeName.size() >= 1 && data.assigneeName.size() <= 80 &&
+        data.title is string && data.title.size() >= 2 && data.title.size() <= 100 &&
+        data.description is string && data.description.size() <= 1000 &&
+        data.categoryId is string && data.categoryId.size() >= 1 && data.categoryId.size() <= 64 &&
+        data.categoryName is string && data.categoryName.size() >= 1 && data.categoryName.size() <= 50 &&
+        data.priority in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] &&
+        data.status in ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'OVERDUE'] &&
+        data.progressPercent is int && data.progressPercent >= 0 && data.progressPercent <= 100 &&
+        data.startDateMillis is int && data.startDateMillis > 0 &&
+        data.dueDateMillis is int && data.dueDateMillis >= data.startDateMillis &&
+        data.sourceType in ['MANUAL', 'WEBHOOK_PENDING', 'IOT_UNCONFIGURED'] &&
+        data.notesCount is int && data.notesCount >= 0 &&
+        data.attachmentsCount is int && data.attachmentsCount >= 0 &&
+        data.createdAt is timestamp && data.createdAt <= request.time &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTrackingUpdate(data) {
+      return data.recordId is string && data.recordId.size() >= 1 && data.recordId.size() <= 128 &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.recordOwnerId is string && data.recordOwnerId.size() >= 1 && data.recordOwnerId.size() <= 128 &&
+        data.assigneeId is string && data.assigneeId.size() >= 1 && data.assigneeId.size() <= 128 &&
+        data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 80 &&
+        data.previousStatus in ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'OVERDUE'] &&
+        data.newStatus in ['PENDING', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED', 'OVERDUE'] &&
+        data.progressPercent is int && data.progressPercent >= 0 && data.progressPercent <= 100 &&
+        data.note is string && data.note.size() <= 500 &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidAttachment(data) {
+      return data.recordId is string && data.recordId.size() >= 1 && data.recordId.size() <= 128 &&
+        data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.recordOwnerId is string && data.recordOwnerId.size() >= 1 && data.recordOwnerId.size() <= 128 &&
+        data.assigneeId is string && data.assigneeId.size() >= 1 && data.assigneeId.size() <= 128 &&
+        data.fileName is string && data.fileName.size() >= 1 && data.fileName.size() <= 120 &&
+        data.mimeType is string && data.mimeType.size() >= 1 && data.mimeType.size() <= 80 &&
+        data.sizeBytes is int && data.sizeBytes >= 0 &&
+        data.localUriString is string && data.localUriString.size() <= 500 &&
+        data.uploadedByName is string && data.uploadedByName.size() >= 1 && data.uploadedByName.size() <= 80 &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidNotification(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.recordId is string && data.recordId.size() <= 128 &&
+        data.trackingCode is string && data.trackingCode.size() <= 32 &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 100 &&
+        data.message is string && data.message.size() >= 1 && data.message.size() <= 300 &&
+        data.type in ['STATUS_UPDATE', 'DEADLINE_REMINDER', 'OVERDUE_ALERT', 'SYSTEM'] &&
+        data.read is bool &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidActivityLog(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+        data.actorName is string && data.actorName.size() >= 1 && data.actorName.size() <= 80 &&
+        data.actorEmail is string && data.actorEmail.size() >= 3 && data.actorEmail.size() <= 120 &&
+        data.action is string && data.action.size() >= 2 && data.action.size() <= 50 &&
+        data.targetType is string && data.targetType.size() >= 2 && data.targetType.size() <= 32 &&
+        data.targetId is string && data.targetId.size() >= 1 && data.targetId.size() <= 128 &&
+        data.details is string && data.details.size() <= 400 &&
+        data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidSystemSettings(data) {
+      return data.shared is bool &&
+        data.autoMarkOverdue is bool &&
+        data.deadlineWarningHours is int && data.deadlineWarningHours >= 1 && data.deadlineWarningHours <= 720 &&
+        data.defaultPriority in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] &&
+        data.allowUserRegistration is bool &&
+        data.externalTrackerStatus is string && data.externalTrackerStatus.size() >= 1 && data.externalTrackerStatus.size() <= 100 &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 80 &&
+        data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // --- 1. USERS COLLECTION (PII ISOLATED) ---
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isSignedIn() && isValidId(userId) &&
+        request.auth.uid == userId &&
+        incoming().userId == request.auth.uid &&
+        incoming().keys().hasAll(['userId', 'displayName', 'email', 'role', 'active', 'permissions', 'notifyOnUpdate', 'notifyOverdue', 'themeMode', 'createdAt', 'updatedAt']) &&
+        incoming().keys().hasOnly(['userId', 'displayName', 'email', 'photoUrl', 'role', 'active', 'permissions', 'notifyOnUpdate', 'notifyOverdue', 'themeMode', 'createdAt', 'updatedAt']) &&
+        isValidUser(incoming()) &&
+        (
+          (incoming().role == 'USER' && incoming().active == true && incoming().permissions.hasOnly(['CREATE_RECORD', 'UPDATE_OWN_RECORD', 'VIEW_REPORTS'])) ||
+          (incoming().role == 'ADMIN' && isBootstrappedAdmin())
+        );
+
+      allow update: if isSignedIn() && isValidId(userId) &&
+        isValidUser(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoUrl', 'role', 'active', 'permissions', 'notifyOnUpdate', 'notifyOverdue', 'themeMode', 'updatedAt'])) ||
+          (request.auth.uid == userId &&
+            incoming().role == existing().role &&
+            incoming().active == existing().active &&
+            incoming().permissions == existing().permissions &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoUrl', 'notifyOnUpdate', 'notifyOverdue', 'themeMode', 'updatedAt']))
+        );
+
+      allow delete: if isAdmin() && isValidId(userId) && request.auth.uid != userId;
+
+      // --- 5. USER NOTIFICATIONS SUBCOLLECTION ---
+      match /notifications/{notificationId} {
+        allow get: if isSignedIn() && isValidId(userId) && isValidId(notificationId) && (request.auth.uid == userId || isAdmin());
+        allow list: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+
+        allow create: if isSignedIn() && isValidId(userId) && isValidId(notificationId) &&
+          (request.auth.uid == userId || isAdmin()) &&
+          incoming().userId == userId &&
+          incoming().keys().hasAll(['userId', 'recordId', 'trackingCode', 'title', 'message', 'type', 'read', 'createdAt']) &&
+          incoming().keys().hasOnly(['userId', 'recordId', 'trackingCode', 'title', 'message', 'type', 'read', 'createdAt']) &&
+          isValidNotification(incoming());
+
+        allow update: if isSignedIn() && isValidId(userId) && isValidId(notificationId) &&
+          (request.auth.uid == userId || isAdmin()) &&
+          isValidNotification(incoming()) &&
+          incoming().userId == existing().userId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['read']);
+
+        allow delete: if isSignedIn() && isValidId(userId) && isValidId(notificationId) && (request.auth.uid == userId || isAdmin());
+      }
+    }
+
+    // --- 2. TRACKING CATEGORIES ---
+    match /trackingCategories/{categoryId} {
+      allow get: if isSignedIn() && isValidId(categoryId) && (existing().shared == true || existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.shared == true || resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(categoryId) &&
+        incoming().userId == request.auth.uid &&
+        (incoming().shared == false || isAdmin()) &&
+        incoming().keys().hasAll(['userId', 'name', 'colorHex', 'description', 'active', 'shared', 'createdAt', 'updatedAt']) &&
+        incoming().keys().hasOnly(['userId', 'name', 'colorHex', 'description', 'active', 'shared', 'createdAt', 'updatedAt']) &&
+        isValidCategory(incoming());
+
+      allow update: if isSignedIn() && isValidId(categoryId) &&
+        isValidCategory(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().createdAt == existing().createdAt &&
+        (isAdmin() || (existing().userId == request.auth.uid && incoming().shared == existing().shared)) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'colorHex', 'description', 'active', 'shared', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(categoryId) && (isAdmin() || existing().userId == request.auth.uid);
+    }
+
+    // --- 3. TRACKING RECORDS ---
+    match /trackingRecords/{recordId} {
+      allow get: if isSignedIn() && isValidId(recordId) && (existing().userId == request.auth.uid || existing().assigneeId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.assigneeId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(recordId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().keys().hasAll(['trackingCode', 'userId', 'ownerName', 'assigneeId', 'assigneeName', 'title', 'description', 'categoryId', 'categoryName', 'priority', 'status', 'progressPercent', 'startDateMillis', 'dueDateMillis', 'sourceType', 'notesCount', 'attachmentsCount', 'createdAt', 'updatedAt']) &&
+        incoming().keys().hasOnly(['trackingCode', 'userId', 'ownerName', 'assigneeId', 'assigneeName', 'title', 'description', 'categoryId', 'categoryName', 'priority', 'status', 'progressPercent', 'startDateMillis', 'dueDateMillis', 'sourceType', 'notesCount', 'attachmentsCount', 'createdAt', 'updatedAt']) &&
+        isValidTrackingRecord(incoming()) &&
+        exists(/databases/$(database)/documents/trackingCategories/$(incoming().categoryId));
+
+      allow update: if isSignedIn() && isValidId(recordId) &&
+        isValidTrackingRecord(incoming()) &&
+        incoming().userId == existing().userId &&
+        incoming().trackingCode == existing().trackingCode &&
+        incoming().createdAt == existing().createdAt &&
+        ((!(existing().status in ['COMPLETED', 'CANCELLED'])) || isAdmin()) &&
+        (
+          (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['ownerName', 'assigneeId', 'assigneeName', 'title', 'description', 'categoryId', 'categoryName', 'priority', 'status', 'progressPercent', 'startDateMillis', 'dueDateMillis', 'sourceType', 'notesCount', 'attachmentsCount', 'updatedAt'])) ||
+          (existing().userId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['assigneeId', 'assigneeName', 'title', 'description', 'categoryId', 'categoryName', 'priority', 'status', 'progressPercent', 'startDateMillis', 'dueDateMillis', 'notesCount', 'attachmentsCount', 'updatedAt'])) ||
+          (existing().assigneeId == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'progressPercent', 'notesCount', 'attachmentsCount', 'updatedAt']))
+        );
+
+      allow delete: if isSignedIn() && isValidId(recordId) && (isAdmin() || existing().userId == request.auth.uid);
+
+      // --- 4. TRACKING UPDATES SUBCOLLECTION ---
+      match /updates/{updateId} {
+        allow get: if isSignedIn() && isValidId(recordId) && isValidId(updateId) && (existing().userId == request.auth.uid || existing().recordOwnerId == request.auth.uid || existing().assigneeId == request.auth.uid || isAdmin());
+        allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.recordOwnerId == request.auth.uid || resource.data.assigneeId == request.auth.uid || isAdmin());
+
+        allow create: if isSignedIn() && isValidId(recordId) && isValidId(updateId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().recordId == recordId &&
+          incoming().keys().hasAll(['recordId', 'userId', 'recordOwnerId', 'assigneeId', 'authorName', 'previousStatus', 'newStatus', 'progressPercent', 'note', 'createdAt']) &&
+          incoming().keys().hasOnly(['recordId', 'userId', 'recordOwnerId', 'assigneeId', 'authorName', 'previousStatus', 'newStatus', 'progressPercent', 'note', 'createdAt']) &&
+          isValidTrackingUpdate(incoming()) &&
+          exists(/databases/$(database)/documents/trackingRecords/$(recordId)) &&
+          incoming().recordOwnerId == get(/databases/$(database)/documents/trackingRecords/$(recordId)).data.userId &&
+          (
+            isAdmin() ||
+            get(/databases/$(database)/documents/trackingRecords/$(recordId)).data.userId == request.auth.uid ||
+            get(/databases/$(database)/documents/trackingRecords/$(recordId)).data.assigneeId == request.auth.uid
+          );
+
+        allow update, delete: if isAdmin() && isValidId(recordId) && isValidId(updateId);
+      }
+
+      // --- 6. ATTACHMENTS SUBCOLLECTION ---
+      match /attachments/{attachmentId} {
+        allow get: if isSignedIn() && isValidId(recordId) && isValidId(attachmentId) && (existing().userId == request.auth.uid || existing().recordOwnerId == request.auth.uid || existing().assigneeId == request.auth.uid || isAdmin());
+        allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || resource.data.recordOwnerId == request.auth.uid || resource.data.assigneeId == request.auth.uid || isAdmin());
+
+        allow create: if isSignedIn() && isValidId(recordId) && isValidId(attachmentId) &&
+          incoming().userId == request.auth.uid &&
+          incoming().recordId == recordId &&
+          incoming().keys().hasAll(['recordId', 'userId', 'recordOwnerId', 'assigneeId', 'fileName', 'mimeType', 'sizeBytes', 'localUriString', 'uploadedByName', 'createdAt']) &&
+          incoming().keys().hasOnly(['recordId', 'userId', 'recordOwnerId', 'assigneeId', 'fileName', 'mimeType', 'sizeBytes', 'localUriString', 'uploadedByName', 'createdAt']) &&
+          isValidAttachment(incoming()) &&
+          exists(/databases/$(database)/documents/trackingRecords/$(recordId)) &&
+          incoming().recordOwnerId == get(/databases/$(database)/documents/trackingRecords/$(recordId)).data.userId &&
+          (
+            isAdmin() ||
+            get(/databases/$(database)/documents/trackingRecords/$(recordId)).data.userId == request.auth.uid ||
+            get(/databases/$(database)/documents/trackingRecords/$(recordId)).data.assigneeId == request.auth.uid
+          );
+
+        allow delete: if isSignedIn() && isValidId(recordId) && isValidId(attachmentId) && (isAdmin() || existing().userId == request.auth.uid || existing().recordOwnerId == request.auth.uid);
+        allow update: if false;
+      }
+    }
+
+    // --- 7. ACTIVITY LOGS ---
+    match /activityLogs/{logId} {
+      allow get: if isSignedIn() && isValidId(logId) && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isSignedIn() && isValidId(logId) &&
+        incoming().userId == request.auth.uid &&
+        incoming().keys().hasAll(['userId', 'actorName', 'actorEmail', 'action', 'targetType', 'targetId', 'details', 'createdAt']) &&
+        incoming().keys().hasOnly(['userId', 'actorName', 'actorEmail', 'action', 'targetType', 'targetId', 'details', 'createdAt']) &&
+        isValidActivityLog(incoming());
+
+      allow update, delete: if false;
+    }
+
+    // --- 8. SYSTEM SETTINGS ---
+    match /systemSettings/{settingId} {
+      allow get: if isSignedIn() && isValidId(settingId) && (existing().shared == true || isAdmin());
+      allow list: if isSignedIn() && (resource.data.shared == true || isAdmin());
+
+      allow create: if isAdmin() && isValidId(settingId) &&
+        incoming().keys().hasAll(['shared', 'autoMarkOverdue', 'deadlineWarningHours', 'defaultPriority', 'allowUserRegistration', 'externalTrackerStatus', 'updatedBy', 'updatedAt']) &&
+        incoming().keys().hasOnly(['shared', 'autoMarkOverdue', 'deadlineWarningHours', 'defaultPriority', 'allowUserRegistration', 'externalTrackerStatus', 'updatedBy', 'updatedAt']) &&
+        isValidSystemSettings(incoming());
+
+      allow update: if isAdmin() && isValidId(settingId) &&
+        isValidSystemSettings(incoming()) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['shared', 'autoMarkOverdue', 'deadlineWarningHours', 'defaultPriority', 'allowUserRegistration', 'externalTrackerStatus', 'updatedBy', 'updatedAt']);
+
+      allow delete: if false;
+    }
+  }
+}
